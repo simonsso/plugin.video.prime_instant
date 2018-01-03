@@ -10,6 +10,7 @@ import cookielib
 import sys
 import re
 import os
+import platform
 import json
 import time
 import string
@@ -84,6 +85,7 @@ viewIdEpisodes = addon.getSetting("viewIdEpisodes")
 viewIdDetails = addon.getSetting("viewIdDetails")
 urlMainS = "https://www.amazon."+siteVersion
 urlMain = "http://www.amazon."+siteVersion
+recourceMain = 'https://' + apiMain + '.amazon.' + siteVersion
 addon.setSetting('email', '')
 addon.setSetting('password', '')
 
@@ -91,9 +93,11 @@ cookieFile = os.path.join(addonUserDataFolder, siteVersion + ".cookies")
 
 NODEBUG = False #True
 
-opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
-userAgent = "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.111 Safari/537.36"
-#userAgent = "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:40.0) Gecko/20100101 Firefox/40.0"
+HTTPCookieHandler = urllib2.HTTPCookieProcessor(cj)
+HTTPSHandler = urllib2.HTTPSHandler(0)
+
+opener = urllib2.build_opener(HTTPSHandler, HTTPCookieHandler)
+userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36"
 opener.addheaders = [('User-agent', userAgent), ('Accept-encoding', 'gzip')]
 
 def index():
@@ -113,7 +117,7 @@ def browseMovies():
     if showLibrary:
         addDir(translation(30005), urlMain+"/gp/video/library/movie?ie=UTF8&show=all&sort="+watchlistOrder, 'listWatchList', "")
     if siteVersion=="de":
-        addDir(translation(30006), urlMain+"/gp/search/ajax/?_encoding=UTF8&bbn=7125891031&field-is_prime_benefit=3282148031&node=3010075031%2C!3010080031%2C!3010082031%2C7125891031%2C3015915031&pf_rd_i=home&pf_rd_m=A3JWKAKR8XB7XF&pf_rd_p=802167847&pf_rd_r=0BXF55E7RHNZ7WWFJ37X&pf_rd_s=center-16&pf_rd_t=12401&search-alias=instant-video", 'listMovies', "")
+        addDir(translation(30006), urlMain+"/gp/search/ajax/?_encoding=UTF8&bbn=3010075031&field-entity_type=9739119031&field-ways_to_watch=7448695031&node=3010075031&pf_rd_i=home&pf_rd_m=A3JWKAKR8XB7XF&pf_rd_p=1381578687&pf_rd_r=DNQ8P36Q8CZGX71BH09Y&pf_rd_s=center-11&pf_rd_t=12401&search-alias=instant-video", 'listMovies', "")
         addDir(translation(30011), urlMain+"/gp/search/other/?rh=n%3A3279204031%2Cn%3A!3010076031%2Cn%3A3356018031&pickerToList=theme_browse-bin&ie=UTF8", 'listGenres', "", "movie")
         addDir(translation(30014), "", 'listDecadesMovie', "")
         if showKids:
@@ -389,6 +393,7 @@ def listMovies(url):
     xbmcplugin.setContent(pluginhandle, "movies")
     content = getUnicodePage(url)
     debug('listMovies')
+    #debug(url)
     #debug(content)
     content = content.replace("\\","")
     if 'id="catCorResults"' in content:
@@ -616,8 +621,8 @@ def listSeasons(seriesName, seriesID, thumb, showAll = False):
         if match:
             for seasonID, title in match:
                 if "dv-season-selector-prime" in title or showAll or showPaidVideos:
-                    if "&lt" in title:
-                        title = title[:title.find("&lt")]
+                    title = title[title.find("&gt;") + 4:]
+                    title = title[:title.find("&lt")]
                     addSeasonDir(title, seasonID, 'listEpisodes', thumb, seriesName, seriesID)
             xbmcplugin.endOfDirectory(pluginhandle)
             xbmc.sleep(100)
@@ -658,7 +663,7 @@ def listEpisodes(seriesID, seasonID, thumb, content="", seriesName=""):
     epliststart = content.find("dv-episode-list")
     eplistend = content.find("ND dv-dp-top-wrapper", epliststart)
     content = content[epliststart:eplistend]
-    spl = content.split('<div id="dv-el-id-')
+    spl = content.split('<div class="dv-episode-container aok-clearfix" id="dv-el-id-')
     for i in range(1, len(spl), 1):
         entry = spl[i]
         match = re.compile('<!-- Title -->(.+?)</', re.DOTALL).findall(entry)
@@ -708,8 +713,9 @@ def listEpisodes(seriesID, seasonID, thumb, content="", seriesName=""):
 
 def listGenres(url, videoType):
     content = getUnicodePage(url)
+    #debug(url)
     #debug(content)
-    content = content[content.find('<ul class="column vPage1">'):]
+    content = content[content.find('<ul class="s-see-all-pagination-column vPage1">'):]
     content = content[:content.find('</div>')]
     match = re.compile('href="(.+?)">.+?>(.+?)</span>.+?>(.+?)<', re.DOTALL).findall(content)
     for url, title, nr in match:
@@ -737,7 +743,12 @@ def playVideo(videoID, selectQuality=False, playTrailer=False):
 
         deviceID = hashlib.sha224("CustomerID" + userAgent).hexdigest()
 
-        asincontent = getUnicodePage('https://'+apiMain+'.amazon.com/cdp/catalog/GetPlaybackResources?asin='+videoID+'&consumptionType=Streaming&desiredResources=AudioVideoUrls%2CCatalogMetadata%2CTransitionTimecodes%2CTrickplayUrls%2CSubtitlePresets%2CSubtitleUrls&deviceID='+deviceID+'&deviceTypeID=AOAGZA014O5RE&firmware=1&marketplaceID='+marketplaceId+'&resourceUsage=CacheResources&videoMaterialType=Feature&operatingSystemName=Windows&operatingSystemVersion=10.0&customerID='+customerID+'&token='+token+'&deviceDrmOverride=CENC&deviceStreamingTechnologyOverride=DASH&deviceProtocolOverride=Https&deviceBitrateAdaptationsOverride=CVBR%2CCBR&audioTrackId=all&titleDecorationScheme=primary-content')
+        asinurl = recourceMain+'/cdp/catalog/GetPlaybackResources?asin='+videoID+'&consumptionType=Streaming&desiredResources=AudioVideoUrls%2CCatalogMetadata%2CTransitionTimecodes%2CTrickplayUrls%2CSubtitlePresets%2CSubtitleUrls&deviceID='+deviceID+'&deviceTypeID=AOAGZA014O5RE&firmware=1&marketplaceID='+marketplaceId+'&resourceUsage=CacheResources&videoMaterialType=Feature&operatingSystemName=Windows&operatingSystemVersion=10.0&customerID='+customerID+'&token='+token+'&deviceDrmOverride=CENC&deviceStreamingTechnologyOverride=DASH&deviceProtocolOverride=Https&deviceBitrateAdaptationsOverride=CVBR%2CCBR&audioTrackId=all&titleDecorationScheme=primary-content'
+        if platform.platform().find('Android') == -1 :
+            asinurl = asinurl + '&supportedDRMKeyScheme=DUAL_KEY'
+
+        asincontent = getUnicodePage(asinurl)
+        #debug(asincontent)
         asininfo = json.loads(asincontent)
         mpdURL = asininfo['audioVideoUrls']['avCdnUrlSets'][0]['avUrlInfoList'][0]['url'];
         if not mpdURL:
@@ -745,13 +756,19 @@ def playVideo(videoID, selectQuality=False, playTrailer=False):
         mpdURL = mpdURL.replace("https", "http")
         log('MPD: '+mpdURL)
 
-        licURL = 'https://'+apiMain+'.amazon.com/cdp/catalog/GetPlaybackResources?asin='+videoID+'&consumptionType=Streaming&desiredResources=Widevine2License&deviceID='+deviceID+'&deviceTypeID=AOAGZA014O5RE&firmware=1&marketplaceID='+marketplaceId+'&resourceUsage=ImmediateConsumption&videoMaterialType=Feature&operatingSystemName=Windows&operatingSystemVersion=10.0&customerID='+customerID+'&token='+token+'&deviceDrmOverride=CENC&deviceStreamingTechnologyOverride=DASH'
+        mpdURL = re.sub(r'~', '', mpdURL) if mpdURL != re.sub(r'~', '', mpdURL) else re.sub(r'/[1-9][$].*?/', '/', mpdURL)
+        log('MPD: '+mpdURL)
+
+        cookies = ";".join(["%s=%s" % (cookie.name, cookie.value) for cookie in cj])
+        licURL = recourceMain+'/cdp/catalog/GetPlaybackResources?asin='+videoID+'&consumptionType=Streaming&desiredResources=Widevine2License&deviceID='+deviceID+'&deviceTypeID=AOAGZA014O5RE&firmware=1&marketplaceID='+marketplaceId+'&resourceUsage=ImmediateConsumption&videoMaterialType=Feature&operatingSystemName=Windows&operatingSystemVersion=10.0&customerID='+customerID+'&token='+token+'&deviceDrmOverride=CENC&deviceStreamingTechnologyOverride=DASH|Cookie='+urllib.quote_plus(cookies)+'&Content-Type=application%2Fx-www-form-urlencoded|widevine2Challenge=B{SSM}&includeHdcpTestKeyInLicense=true|JBlicense;hdcpEnforcementResolutionPixels'
 
         listitem = xbmcgui.ListItem(path=mpdURL)
         listitem.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
         listitem.setProperty('inputstream.adaptive.license_key', licURL)
         listitem.setProperty('inputstream.adaptive.manifest_type', 'mpd')
         listitem.setProperty('inputstreamaddon', 'inputstream.adaptive')
+        listitem.setMimeType('application/dash+xml')
+        listitem.setContentLookup(False)
 
         xbmcplugin.setResolvedUrl(pluginhandle, True, listitem=listitem)
 
